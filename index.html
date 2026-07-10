@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Jigsawcard 拼图</title>
+<style>
+/* ========== 全局 ========== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #eee; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
+button { font-family: inherit; cursor: pointer; border: none; outline: none; -webkit-tap-highlight-color: transparent; }
+.page { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; overflow-y: auto; }
+
+/* ========== 首页 ========== */
+#home-page { padding: 24px 16px 40px; gap: 20px; }
+#home-page h1 { font-size: 32px; margin-top: 12px; background: linear-gradient(135deg, #f093fb, #f5576c, #fda085); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+#home-page .subtitle { font-size: 14px; color: #999; margin-top: -8px; }
+#level-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; width: 100%; max-width: 440px; }
+.level-btn { aspect-ratio: 1; border-radius: 14px; font-size: 16px; font-weight: 700; background: #16213e; color: #ccc; transition: transform 0.15s, box-shadow 0.15s; position: relative; }
+.level-btn:active:not(.locked) { transform: scale(0.93); }
+.level-btn.done { background: linear-gradient(135deg, #11998e, #38ef7d); color: #fff; box-shadow: 0 2px 12px rgba(56,239,125,0.25); }
+.level-btn.current { background: linear-gradient(135deg, #f5576c, #f093fb); color: #fff; box-shadow: 0 2px 16px rgba(245,87,108,0.35); }
+.level-btn.locked { background: #111; color: #444; }
+.level-btn .star { position: absolute; top: 3px; right: 5px; font-size: 11px; }
+
+/* ========== 游戏页 ========== */
+#game-page { background: #1a1a2e; }
+.game-header { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 10px 12px; background: #16213e; gap: 8px; flex-shrink: 0; }
+.game-header button { padding: 8px 14px; border-radius: 10px; font-size: 14px; font-weight: 600; background: #0f3460; color: #eee; }
+.game-header button:active { opacity: 0.7; }
+.game-info { display: flex; gap: 14px; font-size: 13px; color: #ccc; }
+.game-info span { white-space: nowrap; }
+#game-grid-wrap { flex: 1; display: flex; align-items: center; justify-content: center; padding: 12px; width: 100%; overflow: hidden; }
+#game-grid { position: relative; border-radius: 6px; background: #222; box-shadow: 0 4px 24px rgba(0,0,0,0.5); touch-action: none; }
+.piece { position: absolute; border-radius: 3px; transition: left 0.18s ease, top 0.18s ease, transform 0.1s ease; cursor: pointer; touch-action: none; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2); }
+.piece::after { content: ''; position: absolute; inset: 0; border-radius: 3px; pointer-events: none; }
+.piece.grouped { box-shadow: none; }
+.piece.grouped::after { border: 2px solid var(--group-color); }
+.piece.grouped.no-left::after   { border-left: none; }
+.piece.grouped.no-right::after  { border-right: none; }
+.piece.grouped.no-top::after    { border-top: none; }
+.piece.grouped.no-bottom::after { border-bottom: none; }
+.piece.selected { transform: scale(1.04); z-index: 10 !important; }
+.piece.selected::after { border: 3px solid #ffd700; box-shadow: 0 0 12px rgba(255,215,0,0.5), inset 0 0 6px rgba(255,215,0,0.1); }
+.piece.drag-float { transition: none; z-index: 100 !important; opacity: 0.92; box-shadow: 0 8px 32px rgba(0,0,0,0.6); }
+.piece.drag-preview { transition: none; opacity: 0.35; }
+.piece.shake { animation: shake 0.35s ease; }
+@keyframes shake { 0%,100%{transform:translate(0,0)} 20%{transform:translate(-4px,0)} 40%{transform:translate(4px,0)} 60%{transform:translate(-3px,0)} 80%{transform:translate(3px,0)} }
+@keyframes popIn { 0%{transform:scale(0.5);opacity:0} 70%{transform:scale(1.06)} 100%{transform:scale(1);opacity:1} }
+.game-hint { padding: 8px 16px 12px; font-size: 12px; color: #666; text-align: center; flex-shrink: 0; }
+
+/* ========== 结果页 ========== */
+#result-page { justify-content: center; gap: 20px; padding: 24px; background: radial-gradient(ellipse at center, #1a3a2e 0%, #1a1a2e 70%); }
+.result-card { background: #16213e; border-radius: 20px; padding: 32px 24px; text-align: center; max-width: 340px; width: 100%; box-shadow: 0 8px 40px rgba(0,0,0,0.5); animation: popIn 0.5s ease; }
+.result-card h2 { font-size: 28px; margin-bottom: 8px; }
+.result-hint { font-size: 13px; color: #888; margin-bottom: 16px; }
+.result-stats { display: flex; justify-content: center; gap: 32px; margin: 16px 0 24px; font-size: 16px; color: #ccc; }
+.result-stats div { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.result-stats span { font-size: 28px; font-weight: 700; color: #38ef7d; }
+.result-card button { display: block; width: 100%; padding: 14px; border-radius: 12px; font-size: 17px; font-weight: 700; margin-bottom: 10px; }
+#btn-next { background: linear-gradient(135deg, #f5576c, #f093fb); color: #fff; }
+#btn-home { background: #0f3460; color: #ccc; }
+#btn-next:active, #btn-home:active { opacity: 0.75; }
+
+/* ========== 响应式 ========== */
+@media (max-width: 380px) {
+  #level-grid { grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .game-info { gap: 8px; font-size: 11px; }
+  .game-header button { padding: 6px 10px; font-size: 13px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ====== 首页 ====== -->
+<div class="page" id="home-page">
+  <h1>🧩 Jigsawcard</h1>
+  <p class="subtitle">交换碎片 · 合并归位 · 还原图片</p>
+  <div id="level-grid"></div>
+</div>
+
+<!-- ====== 游戏页 ====== -->
+<div class="page" id="game-page" style="display:none">
+  <div class="game-header">
+    <button id="btn-back">← 返回</button>
+    <div class="game-info">
+      <span>📋 <b id="level-label">第1关</b></span>
+      <span>🔀 <b id="move-count">0</b> 步</span>
+      <span>⏱ <b id="timer-display">00:00</b></span>
+    </div>
+    <button id="btn-restart">↺ 重来</button>
+  </div>
+  <div id="game-grid-wrap"><div id="game-grid"></div></div>
+  <div class="game-hint">👆 点击方块选中，再点击另一个方块进行交换｜合并后方块将一起移动</div>
+</div>
+
+<!-- ====== 结果页 ====== -->
+<div class="page" id="result-page" style="display:none">
+  <div class="result-card">
+    <h2>🎉 第 <span id="result-level-num">1</span> 关 通过！</h2>
+    <p class="result-hint">图片已还原，所有方块合并完毕</p>
+    <div class="result-stats">
+      <div>步数<span id="result-moves">0</span></div>
+      <div>用时<span id="result-time">00:00</span></div>
+    </div>
+    <button id="btn-next">▶ 进入第 <span id="btn-next-label">2</span> 关</button>
+    <button id="btn-home">🏠 返回首页</button>
+  </div>
+</div>
+
+<script>
+(function() {
+'use strict';
+
+// ============================================================
+// 关卡配置
+// ============================================================
+const LEVELS = [
+  { id:1,  rows:3, cols:3 }, { id:2,  rows:3, cols:3 },
+  { id:3,  rows:4, cols:3 }, { id:4,  rows:4, cols:3 },
+  { id:5,  rows:4, cols:4 }, { id:6,  rows:4, cols:4 },
+  { id:7,  rows:5, cols:4 }, { id:8,  rows:5, cols:4 },
+  { id:9,  rows:5, cols:5 }, { id:10, rows:5, cols:5 },
+  { id:11, rows:6, cols:5 }, { id:12, rows:6, cols:5 },
+  { id:13, rows:6, cols:5 }, { id:14, rows:6, cols:6 },
+  { id:15, rows:6, cols:6 }, { id:16, rows:6, cols:6 },
+  { id:17, rows:7, cols:6 }, { id:18, rows:7, cols:6 },
+  { id:19, rows:7, cols:7 }, { id:20, rows:7, cols:7 },
+];
+
+// ============================================================
+// 组颜色调色板
+// ============================================================
+const GROUP_COLORS = [
+  '#ff6b6b','#ffa94d','#ffd43b','#69db7c','#4dabf7',
+  '#da77f2','#f783ac','#63e6be','#ff8787','#74c0fc',
+  '#b197fc','#fcc419','#20c997','#f06595','#748ffc',
+  '#fab005','#12b886','#e64980','#5c7cfa','#fd7e14',
+];
+
+// ============================================================
+// DOM 引用
+// ============================================================
+const $ = (s) => document.querySelector(s);
+const homePage    = $('#home-page');
+const gamePage    = $('#game-page');
+const resultPage  = $('#result-page');
+const levelGrid   = $('#level-grid');
+const gameGrid    = $('#game-grid');
+const moveCountEl = $('#move-count');
+const timerEl     = $('#timer-display');
+const levelLabel  = $('#level-label');
+
+// ============================================================
+// 游戏状态
+// ============================================================
+let ROWS, COLS, TOTAL;
+let cells = [];           // cells[idx] = { pieceId, groupId } | null
+let groups = null;        // Map<id, { pieceIds: Set<number> }>
+let moves = 0;
+let seconds = 0;
+let timerId = null;
+let selectedGroupId = null;
+let currentLevelId = 1;
+// 拖拽相关
+let dragging = false;
+let dragGroupId = null;
+let dragAnchorCell = -1;       // 拖拽开始时组的锚点 cell
+let dragOffsetX = 0;           // 触摸点相对锚点格中心的偏移(px)
+let dragOffsetY = 0;
+let dragPreviewCell = -1;      // 当前预览的锚点 cell
+let cellSize = 0;
+let gridGap = 0;
+let gridLeft = 0, gridTop = 0; // grid 在页面中的位置
+
+// ============================================================
+// 工具函数
+// ============================================================
+function pieceCorrectRow(pieceId) { return Math.floor(pieceId / COLS); }
+function pieceCorrectCol(pieceId) { return pieceId % COLS; }
+function cellRow(idx) { return Math.floor(idx / COLS); }
+function cellCol(idx) { return idx % COLS; }
+function rowColToIdx(r, c) { return r * COLS + c; }
+
+// 获取组内 pieceId 最小的（锚点，即正确位置最左上那个）
+function groupAnchorPiece(groupId) {
+  const g = groups.get(groupId);
+  if (!g) return -1;
+  let minId = Infinity;
+  for (const pid of g.pieceIds) { if (pid < minId) minId = pid; }
+  return minId;
+}
+
+// 获取某个 piece 当前所在的 cell index
+function findPieceCell(pieceId) {
+  for (let i = 0; i < TOTAL; i++) {
+    if (cells[i] && cells[i].pieceId === pieceId) return i;
+  }
+  return -1;
+}
+
+// 获取组的锚点 cell（根据锚点 pieceId 找当前位置）
+function groupAnchorCell(groupId) {
+  const anchorPid = groupAnchorPiece(groupId);
+  return findPieceCell(anchorPid);
+}
+
+// 获取组内所有 piece 相对锚点的偏移（基于正确位置）
+function getGroupOffsets(groupId) {
+  const anchorPid = groupAnchorPiece(groupId);
+  const aRow = pieceCorrectRow(anchorPid);
+  const aCol = pieceCorrectCol(anchorPid);
+  const offsets = [];
+  for (const pid of groups.get(groupId).pieceIds) {
+    offsets.push({
+      pieceId: pid,
+      dr: pieceCorrectRow(pid) - aRow,
+      dc: pieceCorrectCol(pid) - aCol,
+    });
+  }
+  return offsets;
+}
+
+// 判断组放在 anchorCell 为锚点时是否越界（用于拖拽预览）
+function canPlaceGroupAt(groupId, anchorCell) {
+  if (anchorCell < 0 || anchorCell >= TOTAL) return false;
+  const offsets = getGroupOffsets(groupId);
+  const aRow = cellRow(anchorCell);
+  const aCol = cellCol(anchorCell);
+  for (const { pieceId, dr, dc } of offsets) {
+    const tr = aRow + dr, tc = aCol + dc;
+    if (tr < 0 || tr >= ROWS || tc < 0 || tc >= COLS) return false;
+  }
+  return true;
+}
+
+// ============================================================
+// 核心逻辑：移动组到新锚点
+// - 无重叠时：组与目标区域直接交换
+// - 有重叠时：只移动不重叠的部分，被挤出的方块反向填入空位
+// ============================================================
+function moveGroup(groupId, newAnchorCell) {
+  const g = groups.get(groupId);
+  if (!g) return false;
+  if (newAnchorCell < 0 || newAnchorCell >= TOTAL) return false;
+
+  const oldAnchorCell = groupAnchorCell(groupId);
+  if (oldAnchorCell === newAnchorCell) return false;
+
+  const offsets = getGroupOffsets(groupId);
+  const oldAR = cellRow(oldAnchorCell), oldAC = cellCol(oldAnchorCell);
+  const newAR = cellRow(newAnchorCell), newAC = cellCol(newAnchorCell);
+
+  // 计算 S_old / S_new
+  const S_old = new Set();
+  const S_new = new Set();
+  for (const { pieceId, dr, dc } of offsets) {
+    S_old.add(rowColToIdx(oldAR + dr, oldAC + dc));
+    const nc = rowColToIdx(newAR + dr, newAC + dc);
+    if (nc < 0 || nc >= TOTAL) return false; // 越界
+    S_new.add(nc);
+  }
+
+  // V = 旧位置 - 新位置（空出的格）, F = 新位置 - 旧位置（新占的格）
+  const V = [...S_old].filter(c => !S_new.has(c)).sort((a, b) => a - b);
+  const F = [...S_new].filter(c => !S_old.has(c)).sort((a, b) => a - b);
+
+  if (V.length === 0) return false; // 完全重叠，无需移动
+  if (V.length !== F.length) return false; // 不应发生
+
+  // 保存 F 中被挤出的方块
+  const displaced = F.map(c => cells[c]).filter(Boolean);
+
+  // 清除 V 和 F 位置的旧数据
+  for (const v of V) cells[v] = null;
+  for (const f of F) cells[f] = null;
+
+  // 放置组的方块到新位置
+  for (const { pieceId, dr, dc } of offsets) {
+    const nc = rowColToIdx(newAR + dr, newAC + dc);
+    cells[nc] = { pieceId, groupId };
+  }
+
+  // 被挤出的方块填入空位（按 cell 顺序一一对应）
+  for (let i = 0; i < V.length; i++) {
+    cells[V[i]] = displaced[i];
+  }
+
+  moves++;
+  return true;
+}
+
+// ============================================================
+// 核心逻辑：全局扫描合并
+// ============================================================
+function scanAndMerge() {
+  let merged = true;
+  let mergeRounds = 0;
+  while (merged && mergeRounds < 100) { // 安全上限
+    merged = false;
+    mergeRounds++;
+    for (let i = 0; i < TOTAL; i++) {
+      if (!cells[i]) continue;
+      // 右邻居
+      if (cellCol(i) < COLS - 1) {
+        const j = i + 1;
+        if (tryMergePair(i, j)) { merged = true; }
+      }
+      // 下邻居
+      if (cellRow(i) < ROWS - 1) {
+        const j = i + COLS;
+        if (tryMergePair(i, j)) { merged = true; }
+      }
+    }
+  }
+}
+
+function tryMergePair(i, j) {
+  if (!cells[i] || !cells[j]) return false;
+  const gA = cells[i].groupId, gB = cells[j].groupId;
+  if (gA === gB) return false;
+  const ga = groups.get(gA), gb = groups.get(gB);
+  if (!ga || !gb) return false;
+
+  const pA = cells[i].pieceId, pB = cells[j].pieceId;
+  const correctDr = pieceCorrectRow(pB) - pieceCorrectRow(pA);
+  const correctDc = pieceCorrectCol(pB) - pieceCorrectCol(pA);
+  const currentDr = cellRow(j) - cellRow(i);
+  const currentDc = cellCol(j) - cellCol(i);
+
+  if (correctDr === currentDr && correctDc === currentDc) {
+    // 合并：小 ID 存活
+    const survivorId = Math.min(gA, gB);
+    const absorbedId = Math.max(gA, gB);
+    const survivor = groups.get(survivorId);
+    const absorbed = groups.get(absorbedId);
+    for (const pid of absorbed.pieceIds) survivor.pieceIds.add(pid);
+    groups.delete(absorbedId);
+    // 更新 cells
+    for (let k = 0; k < TOTAL; k++) {
+      if (cells[k] && cells[k].groupId === absorbedId) {
+        cells[k].groupId = survivorId;
+      }
+    }
+    return true;
+  }
+  return false;
+}
+
+// ============================================================
+// 核心逻辑：胜利检测
+// ============================================================
+function checkWin() {
+  return groups.size === 1;
+}
+
+// ============================================================
+// 重置所有组（每个方块回到自己的独立组），然后重新扫描合并
+// 这样既支持合并也支持拆分
+// ============================================================
+function resetGroups() {
+  groups = new Map();
+  for (let i = 0; i < TOTAL; i++) {
+    if (!cells[i]) continue;
+    const pid = cells[i].pieceId;
+    cells[i].groupId = pid;
+    groups.set(pid, { pieceIds: new Set([pid]) });
+  }
+}
+
+// ============================================================
+// 执行一步移动后的全部后处理
+// ============================================================
+function postMoveProcess() {
+  resetGroups();     // 拆散所有组
+  scanAndMerge();    // 重新扫描合并（相对位置仍正确的会合并回去）
+  selectedGroupId = null; // 组 ID 已重建，清除选中
+  renderGrid();
+  updateStats();
+  if (checkWin()) {
+    endGame();
+  }
+}
+
+// ============================================================
+// 进度持久化 (localStorage)
+// ============================================================
+const PROGRESS_KEY = 'jigsawcard_progress';
+function loadProgress() {
+  try {
+    const raw = localStorage.getItem(PROGRESS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+function saveProgress(progress) {
+  try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(progress)); } catch {}
+}
+function markLevelDone(levelId, moves, seconds) {
+  const p = loadProgress();
+  const prev = p[levelId];
+  // 保留最优成绩；prev.done===false 说明首次通关，必须保存
+  if (!prev || !prev.done || moves < prev.bestMoves || (moves === prev.bestMoves && seconds < prev.bestTime)) {
+    p[levelId] = { done: true, bestMoves: moves, bestTime: seconds };
+  }
+  // 解锁下一关
+  if (!p[levelId + 1]) p[levelId + 1] = { done: false };
+  saveProgress(p);
+}
+function isLevelUnlocked(levelId) {
+  if (levelId === 1) return true;
+  const p = loadProgress();
+  return !!(p[levelId] && (p[levelId].done || p[levelId].done === false));
+}
+
+// ============================================================
+// 计时器
+// ============================================================
+function startTimer() {
+  stopTimer();
+  seconds = 0;
+  timerEl.textContent = '00:00';
+  timerId = setInterval(() => {
+    seconds++;
+    const m = Math.floor(seconds / 60).toString().padStart(2,'0');
+    const s = (seconds % 60).toString().padStart(2,'0');
+    timerEl.textContent = m + ':' + s;
+  }, 1000);
+}
+function stopTimer() {
+  if (timerId) { clearInterval(timerId); timerId = null; }
+}
+
+// ============================================================
+// 渲染
+// ============================================================
+function calcCellSize() {
+  const wrap = $('#game-grid-wrap');
+  const maxW = wrap.clientWidth - 16;
+  const maxH = wrap.clientHeight - 16;
+  const gapTotalW = gridGap * (COLS - 1);
+  const gapTotalH = gridGap * (ROWS - 1);
+  const byW = (maxW - gapTotalW) / COLS;
+  const byH = (maxH - gapTotalH) / ROWS;
+  cellSize = Math.floor(Math.min(byW, byH));
+  if (cellSize < 28) cellSize = 28; // 最小触摸目标
+  // re-clamp by width
+  const totalW = cellSize * COLS + gridGap * (COLS - 1);
+  const totalH = cellSize * ROWS + gridGap * (ROWS - 1);
+  // 如果太高则缩
+  if (totalH > maxH) {
+    cellSize = Math.floor((maxH - gapTotalH) / ROWS);
+  }
+}
+
+function renderGrid() {
+  gameGrid.innerHTML = '';
+  calcCellSize();
+  const totalW = cellSize * COLS + gridGap * (COLS - 1);
+  const totalH = cellSize * ROWS + gridGap * (ROWS - 1);
+  gameGrid.style.width  = totalW + 'px';
+  gameGrid.style.height = totalH + 'px';
+
+  const imageUrl = 'picture/关卡' + currentLevelId + '.png';
+
+  for (let i = 0; i < TOTAL; i++) {
+    if (!cells[i]) continue;
+    const { pieceId, groupId } = cells[i];
+    const cr = cellRow(i), cc = cellCol(i);
+    const pr = pieceCorrectRow(pieceId), pc = pieceCorrectCol(pieceId);
+    const left = cc * (cellSize + gridGap);
+    const top  = cr * (cellSize + gridGap);
+
+    const div = document.createElement('div');
+    div.className = 'piece';
+    div.dataset.cell = i;
+    div.dataset.groupId = groupId;
+    div.style.width  = cellSize + 'px';
+    div.style.height = cellSize + 'px';
+    div.style.left = left + 'px';
+    div.style.top  = top  + 'px';
+    div.style.backgroundImage = 'url("' + imageUrl + '")';
+    div.style.backgroundSize = (COLS * 100) + '% ' + (ROWS * 100) + '%';
+    const bgX = COLS > 1 ? (pc / (COLS - 1) * 100) : 0;
+    const bgY = ROWS > 1 ? (pr / (ROWS - 1) * 100) : 0;
+    div.style.backgroundPosition = bgX + '% ' + bgY + '%';
+
+    // 组颜色标记
+    const g = groups.get(groupId);
+    if (g && groups.size > 1) {
+      const colorIdx = groupId % GROUP_COLORS.length;
+      div.style.setProperty('--group-color', GROUP_COLORS[colorIdx]);
+      div.classList.add('grouped');
+      // 消除同组相邻方块间的边框
+      if (cellCol(i) > 0 && cells[i-1] && cells[i-1].groupId === groupId)
+        div.classList.add('no-left');
+      if (cellCol(i) < COLS - 1 && cells[i+1] && cells[i+1].groupId === groupId)
+        div.classList.add('no-right');
+      if (cellRow(i) > 0 && cells[i-COLS] && cells[i-COLS].groupId === groupId)
+        div.classList.add('no-top');
+      if (cellRow(i) < ROWS - 1 && cells[i+COLS] && cells[i+COLS].groupId === groupId)
+        div.classList.add('no-bottom');
+    }
+    if (groupId === selectedGroupId) {
+      div.classList.add('selected');
+    }
+
+    // 事件绑定（pointerdown 时 setPointerCapture，确保拖拽不丢失）
+    div.addEventListener('pointerdown', onPointerDown);
+    div.addEventListener('pointermove', onPointerMove);
+    div.addEventListener('pointerup', onPointerUp);
+    div.addEventListener('pointercancel', onPointerUp);
+    div.addEventListener('lostpointercapture', onPointerUp);
+
+    gameGrid.appendChild(div);
+  }
+
+  // 缓存 grid 在页面中的位置
+  const rect = gameGrid.getBoundingClientRect();
+  gridLeft = rect.left;
+  gridTop = rect.top;
+}
+
+function updateStats() {
+  moveCountEl.textContent = moves;
+}
+
+function refreshPiecePositions() {
+  // 不重建 DOM，仅更新 piece 的 left/top/css
+  const pieces = gameGrid.querySelectorAll('.piece');
+  pieces.forEach(p => {
+    const cellIdx = parseInt(p.dataset.cell);
+    const cr = cellRow(cellIdx), cc = cellCol(cellIdx);
+    p.style.left = (cc * (cellSize + gridGap)) + 'px';
+    p.style.top  = (cr * (cellSize + gridGap)) + 'px';
+    const groupId = parseInt(p.dataset.groupId);
+    // 更新样式类
+    p.classList.remove('grouped','selected','drag-float','drag-preview','shake');
+    const g = groups.get(groupId);
+    if (g && groups.size > 1) {
+      p.style.setProperty('--group-color', GROUP_COLORS[groupId % GROUP_COLORS.length]);
+      p.classList.add('grouped');
+    }
+    if (groupId === selectedGroupId) p.classList.add('selected');
+  });
+}
+
+// ============================================================
+// 输入处理
+// ============================================================
+let pointerIsDown = false;
+let pointerStartX = 0, pointerStartY = 0;
+let pointerMoved = false;
+
+function onPointerDown(e) {
+  e.preventDefault();
+  e.currentTarget.setPointerCapture(e.pointerId);
+  pointerIsDown = true;
+  pointerStartX = e.clientX;
+  pointerStartY = e.clientY;
+  pointerMoved = false;
+  dragging = false;
+}
+
+function onPointerMove(e) {
+  if (!pointerIsDown) return; // 必须按下后才处理
+  if (dragging) {
+    e.preventDefault();
+    handleDragMove(e);
+    return;
+  }
+  if (Math.abs(e.clientX - pointerStartX) > 6 || Math.abs(e.clientY - pointerStartY) > 6) {
+    pointerMoved = true;
+    // 开始拖拽
+    const cellIdx = parseInt(e.currentTarget.dataset.cell);
+    if (isNaN(cellIdx) || !cells[cellIdx]) return;
+    const groupId = cells[cellIdx].groupId;
+    const g = groups.get(groupId);
+    if (!g) return;
+    startDrag(groupId, e);
+  }
+}
+
+function onPointerUp(e) {
+  pointerIsDown = false;
+  if (dragging) {
+    e.preventDefault();
+    endDrag(e);
+    return;
+  }
+  if (!pointerMoved) {
+    // 轻触（tap）
+    handleTap(e);
+  }
+  pointerMoved = false;
+}
+
+function handleTap(e) {
+  const cellIdx = parseInt(e.currentTarget.dataset.cell);
+  if (isNaN(cellIdx) || !cells[cellIdx]) return;
+  const tappedGroupId = cells[cellIdx].groupId;
+  if (!groups.has(tappedGroupId)) return;
+
+  if (selectedGroupId === null) {
+    // 选中该组
+    selectedGroupId = tappedGroupId;
+    renderGrid();
+  } else if (selectedGroupId === tappedGroupId) {
+    // 取消选中
+    selectedGroupId = null;
+    renderGrid();
+  } else {
+    // 将选中的组移动到点击位置
+    const success = moveGroup(selectedGroupId, cellIdx);
+    if (success) {
+      postMoveProcess();
+    } else {
+      // 移动失败（越界等）
+      selectedGroupId = null;
+      renderGrid();
+      shakePiece(e.currentTarget);
+    }
+  }
+}
+
+function shakePiece(el) {
+  el.classList.add('shake');
+  setTimeout(() => el.classList.remove('shake'), 360);
+}
+
+// ============================================================
+// 拖拽
+// ============================================================
+function startDrag(groupId, e) {
+  selectedGroupId = null; // 拖拽时清除 tap 选中
+  dragging = true;
+  dragGroupId = groupId;
+  dragAnchorCell = groupAnchorCell(groupId);
+  const ar = cellRow(dragAnchorCell), ac = cellCol(dragAnchorCell);
+  const anchorCenterX = gridLeft + ac * (cellSize + gridGap) + cellSize / 2;
+  const anchorCenterY = gridTop  + ar * (cellSize + gridGap) + cellSize / 2;
+  dragOffsetX = e.clientX - anchorCenterX;
+  dragOffsetY = e.clientY - anchorCenterY;
+  dragPreviewCell = dragAnchorCell;
+
+  // 视觉：拖拽的碎片上浮
+  updateDragVisual(e);
+}
+
+function handleDragMove(e) {
+  updateDragVisual(e);
+}
+
+function updateDragVisual(e) {
+  const pieces = gameGrid.querySelectorAll('.piece');
+  // 先清除所有拖拽状态
+  pieces.forEach(p => {
+    p.classList.remove('drag-float', 'drag-preview');
+    p.style.transform = '';
+  });
+
+  // 计算预览锚点
+  const newAnchorCX = e.clientX - dragOffsetX;
+  const newAnchorCY = e.clientY - dragOffsetY;
+  const col = Math.round((newAnchorCX - gridLeft - cellSize / 2) / (cellSize + gridGap));
+  const row = Math.round((newAnchorCY - gridTop  - cellSize / 2) / (cellSize + gridGap));
+  const clampedCol = Math.max(0, Math.min(COLS - 1, col));
+  const clampedRow = Math.max(0, Math.min(ROWS - 1, row));
+  dragPreviewCell = rowColToIdx(clampedRow, clampedCol);
+
+  // 合法？
+  const valid = canPlaceGroupAt(dragGroupId, dragPreviewCell);
+
+  // 设置拖拽浮动
+  const offsets = getGroupOffsets(dragGroupId);
+  const aRow = cellRow(dragAnchorCell), aCol = cellCol(dragAnchorCell);
+  pieces.forEach(p => {
+    const ci = parseInt(p.dataset.cell);
+    const pid = cells[ci] ? cells[ci].pieceId : -1;
+    // 是否是拖拽组的碎片
+    const isDragPiece = offsets.some(o => o.pieceId === pid && cells[ci] && cells[ci].groupId === dragGroupId);
+    if (isDragPiece) {
+      // 浮动到预览位置
+      const offset = offsets.find(o => o.pieceId === pid);
+      const pr = clampedRow + offset.dr, pc = clampedCol + offset.dc;
+      const origLeft = aCol * (cellSize + gridGap) + offset.dc * (cellSize + gridGap);
+      const origTop  = aRow * (cellSize + gridGap) + offset.dr * (cellSize + gridGap);
+      const newLeft = pc * (cellSize + gridGap);
+      const newTop  = pr * (cellSize + gridGap);
+      p.style.transform = 'translate(' + (newLeft - origLeft) + 'px, ' + (newTop - origTop) + 'px)';
+      p.classList.add('drag-float');
+      if (!valid) p.style.opacity = '0.6';
+    } else if (cells[ci] && cells[ci].groupId !== dragGroupId) {
+      // 预览：目标位置的碎片
+      const pr = clampedRow + (pieceCorrectRow(pid) - pieceCorrectRow(pid)); // noop, just check
+      // 高亮目标区域
+      const offsets2 = getGroupOffsets(dragGroupId);
+      const isTarget = offsets2.some(o => {
+        const tr = clampedRow + o.dr, tc = clampedCol + o.dc;
+        return rowColToIdx(tr, tc) === ci;
+      });
+      if (isTarget) {
+        p.classList.add('drag-preview');
+      }
+    }
+  });
+}
+
+function endDrag(e) {
+  dragging = false;
+  if (dragGroupId === null) { return; }
+
+  // 清除视觉
+  const pieces = gameGrid.querySelectorAll('.piece');
+  pieces.forEach(p => {
+    p.classList.remove('drag-float', 'drag-preview');
+    p.style.transform = '';
+    p.style.opacity = '';
+  });
+
+  let handled = false;
+  if (dragPreviewCell >= 0 && dragPreviewCell !== dragAnchorCell) {
+    const success = moveGroup(dragGroupId, dragPreviewCell);
+    if (success) {
+      selectedGroupId = null;
+      postMoveProcess();
+      handled = true;
+    }
+  }
+  if (!handled) {
+    renderGrid(); // 移动失败或无效 → 弹回
+  }
+
+  dragGroupId = null;
+  dragAnchorCell = -1;
+  dragPreviewCell = -1;
+}
+
+// ============================================================
+// 游戏流程
+// ============================================================
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function initGame(levelId) {
+  currentLevelId = levelId;
+  const cfg = LEVELS.find(l => l.id === levelId);
+  ROWS = cfg.rows;
+  COLS = cfg.cols;
+  TOTAL = ROWS * COLS;
+
+  // 初始化 cells & groups
+  cells = [];
+  groups = new Map();
+  const pieceIds = [];
+  for (let i = 0; i < TOTAL; i++) pieceIds.push(i);
+
+  const shuffled = shuffle(pieceIds);
+  for (let i = 0; i < TOTAL; i++) {
+    const pid = shuffled[i];
+    cells[i] = { pieceId: pid, groupId: pid };
+    groups.set(pid, { pieceIds: new Set([pid]) });
+  }
+
+  moves = 0;
+  selectedGroupId = null;
+  dragGroupId = null;
+  dragging = false;
+  pointerIsDown = false;
+
+  updateStats();
+  levelLabel.textContent = '第' + levelId + '关';
+  showPage('game');
+  // 延迟一帧等布局完成后再渲染，否则 grid 尺寸可能为 0
+  requestAnimationFrame(() => {
+    renderGrid();
+    startTimer();
+  });
+}
+
+function endGame() {
+  stopTimer();
+  markLevelDone(currentLevelId, moves, seconds);
+
+  // 延迟跳转结果页
+  setTimeout(() => {
+    $('#result-level-num').textContent = currentLevelId;
+    $('#result-moves').textContent = moves;
+    const m = Math.floor(seconds / 60).toString().padStart(2,'0');
+    const s = (seconds % 60).toString().padStart(2,'0');
+    $('#result-time').textContent = m + ':' + s;
+    const nextId = currentLevelId + 1;
+    if (nextId <= 20) {
+      $('#btn-next-label').textContent = nextId;
+      $('#btn-next').style.display = 'block';
+    } else {
+      $('#btn-next').style.display = 'none'; // 全部通关
+    }
+    showPage('result');
+  }, 400);
+}
+
+// ============================================================
+// 页面导航
+// ============================================================
+function showPage(name) {
+  homePage.style.display   = name === 'home'   ? 'flex' : 'none';
+  gamePage.style.display   = name === 'game'   ? 'flex' : 'none';
+  resultPage.style.display = name === 'result' ? 'flex' : 'none';
+  if (name !== 'game') stopTimer();
+}
+
+function buildHomePage() {
+  const progress = loadProgress();
+  levelGrid.innerHTML = '';
+  for (let i = 1; i <= 20; i++) {
+    const btn = document.createElement('button');
+    btn.className = 'level-btn';
+    btn.textContent = i;
+    const unlocked = isLevelUnlocked(i);
+    const done = progress[i] && progress[i].done;
+    if (done) {
+      btn.classList.add('done');
+      btn.innerHTML = i + '<span class="star">⭐</span>';
+    } else if (unlocked) {
+      btn.classList.add('current');
+    } else {
+      btn.classList.add('locked');
+    }
+    btn.addEventListener('click', () => {
+      if (!isLevelUnlocked(i)) return;
+      selectedGroupId = null;
+      initGame(i); // initGame 内会调用 showPage('game')
+    });
+    levelGrid.appendChild(btn);
+  }
+}
+
+// ============================================================
+// 事件绑定
+// ============================================================
+$('#btn-back').addEventListener('click', () => {
+  stopTimer();
+  selectedGroupId = null;
+  showPage('home');
+  buildHomePage();
+});
+$('#btn-restart').addEventListener('click', () => {
+  initGame(currentLevelId);
+});
+$('#btn-next').addEventListener('click', () => {
+  const nextId = currentLevelId + 1;
+  if (nextId > 20) { showPage('home'); buildHomePage(); return; }
+  if (!isLevelUnlocked(nextId)) {
+    // 理论上赢了就解锁了
+    markLevelDone(currentLevelId, moves, seconds);
+  }
+  initGame(nextId); // initGame 内会调用 showPage('game')
+});
+$('#btn-home').addEventListener('click', () => {
+  showPage('home');
+  buildHomePage();
+});
+
+// 窗口大小变化时重绘
+let resizeDebounce = null;
+window.addEventListener('resize', () => {
+  if (gamePage.style.display !== 'none') {
+    clearTimeout(resizeDebounce);
+    resizeDebounce = setTimeout(() => renderGrid(), 200);
+  }
+});
+
+// 阻止游戏区域的默认滚动/缩放
+gameGrid.addEventListener('touchstart', function(e) {
+  if (e.target.classList.contains('piece')) e.preventDefault();
+}, { passive: false });
+gameGrid.addEventListener('gesturestart', e => e.preventDefault());
+
+// ============================================================
+// 启动
+// ============================================================
+buildHomePage();
+showPage('home');
+
+})();
+</script>
+</body>
+</html>
